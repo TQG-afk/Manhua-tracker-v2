@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manhua Tracker Pro + Backup</title>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --status-reading: #22c55e;
+            --status-completed: #3b82f6;
+            --status-onhold: #eab308;
+            --secondary: #475569;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .container { width: 100%; max-width: 700px; }
+
+        .input-group, .search-group {
+            background: var(--card);
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+
+        input, select {
+            background: #334155;
+            border: 1px solid #475569;
+            padding: 10px;
+            border-radius: 6px;
+            color: white;
+            outline: none;
+        }
+
+        input:focus { border-color: var(--primary); }
+        .flex-grow { flex-grow: 1; }
+
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        button:hover { filter: brightness(1.1); }
+        .btn-secondary { background: var(--secondary); font-size: 0.8rem; }
+
+        .manhua-item {
+            background: var(--card);
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            border-left: 5px solid transparent;
+        }
+
+        /* Status Colors */
+        .status-Reading { border-left-color: var(--status-reading); }
+        .status-Completed { border-left-color: var(--status-completed); }
+        .status-On-Hold { border-left-color: var(--status-onhold); }
+
+        .info h3 { margin: 0; font-size: 1.1rem; }
+        .status-text { 
+            font-size: 0.75rem; 
+            text-transform: uppercase; 
+            font-weight: bold; 
+            cursor: pointer;
+            opacity: 0.8;
+        }
+        
+        .last-updated {
+            display: block;
+            font-size: 0.65rem;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .controls { display: flex; align-items: center; gap: 10px; }
+
+        .chapter-badge {
+            background: #334155;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: #818cf8;
+            min-width: 65px;
+            text-align: center;
+        }
+
+        .btn-circle {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-size: 1.2rem;
+        }
+
+        .delete-btn { background: #ef4444; margin-left: 5px; }
+        #searchInput { width: 100%; font-size: 1rem; }
+        
+        .backup-controls {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>📚 Manhua Tracker Pro</h2>
+    
+    <div class="input-group">
+        <input type="text" id="titleInput" class="flex-grow" placeholder="Enter Manhua Title...">
+        <select id="statusInput">
+            <option value="Reading">Reading</option>
+            <option value="On-Hold">On-Hold</option>
+            <option value="Completed">Completed</option>
+        </select>
+        <input type="number" id="chapterInput" placeholder="Ch#" style="width: 70px;">
+        <button onclick="addManhua()">Add</button>
+    </div>
+
+    <div class="search-group">
+        <input type="text" id="searchInput" placeholder="🔍 Search your library..." oninput="render()">
+        <div class="backup-controls">
+            <button class="btn-secondary flex-grow" onclick="exportData()">💾 Export Backup (JSON)</button>
+            <button class="btn-secondary flex-grow" onclick="document.getElementById('fileInput').click()">📂 Import Backup</button>
+            <input type="file" id="fileInput" style="display:none" onchange="importData(event)" accept=".json">
+        </div>
+    </div>
+
+    <div id="manhuaList"></div>
+</div>
+
+<script>
+    // Load data
+    let library = JSON.parse(localStorage.getItem('myManhuaV2')) || [];
+
+    function save() {
+        localStorage.setItem('myManhuaV2', JSON.stringify(library));
+        render();
+    }
+
+    function addManhua() {
+        const title = document.getElementById('titleInput').value;
+        const status = document.getElementById('statusInput').value;
+        const chapter = document.getElementById('chapterInput').value || 1;
+
+        if (title) {
+            library.push({ 
+                id: Date.now(), 
+                title, 
+                status, 
+                chapter: parseInt(chapter),
+                updated: new Date().toLocaleString()
+            });
+            document.getElementById('titleInput').value = '';
+            document.getElementById('chapterInput').value = '';
+            save();
+        }
+    }
+
+    function updateChapter(id, amount) {
+        const item = library.find(m => m.id === id);
+        item.chapter = Math.max(0, item.chapter + amount);
+        item.updated = new Date().toLocaleString();
+        save();
+    }
+
+    function toggleStatus(id) {
+        const item = library.find(m => m.id === id);
+        const statuses = ["Reading", "On-Hold", "Completed"];
+        let nextIndex = (statuses.indexOf(item.status) + 1) % statuses.length;
+        item.status = statuses[nextIndex];
+        item.updated = new Date().toLocaleString();
+        save();
+    }
+
+    function deleteManhua(id) {
+        if(confirm('Delete this entry?')) {
+            library = library.filter(m => m.id !== id);
+            save();
+        }
+    }
+
+    // EXPORT FUNCTION
+    function exportData() {
+        const dataStr = JSON.stringify(library, null, 4);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `manhua_backup_${new Date().toISOString().slice(0,10)}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // IMPORT FUNCTION
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    if(confirm('Replace current library with this backup?')) {
+                        library = importedData;
+                        save();
+                        alert('Import Successful!');
+                    }
+                } else {
+                    alert('Invalid file format.');
+                }
+            } catch (err) {
+                alert('Error reading file. Make sure it is a valid .json');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function render() {
+        const list = document.getElementById('manhuaList');
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        
+        const filtered = library.filter(m => m.title.toLowerCase().includes(searchTerm));
+
+        // Sort by most recently updated
+        filtered.sort((a, b) => new Date(b.updated) - new Date(a.updated));
+
+        list.innerHTML = filtered.map(m => `
+            <div class="manhua-item status-${m.status.replace(' ', '-')}">
+                <div class="info">
+                    <h3>${m.title}</h3>
+                    <span class="status-text" onclick="toggleStatus(${m.id})">${m.status}</span>
+                    <span class="last-updated">Modified: ${m.updated || 'N/A'}</span>
+                </div>
+                <div class="controls">
+                    <button class="btn-circle" onclick="updateChapter(${m.id}, -1)">-</button>
+                    <span class="chapter-badge">Ch. ${m.chapter}</span>
+                    <button class="btn-circle" onclick="updateChapter(${m.id}, 1)">+</button>
+                    <button class="btn-circle delete-btn" onclick="deleteManhua(${m.id})">×</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Initial render
+    render();
+</script>
+
+</body>
+</html>
